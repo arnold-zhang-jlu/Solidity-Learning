@@ -1,44 +1,48 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import "./PriceConverter.sol";
 
 contract FundMe {
-
-    AggregatorV3Interface internal priceFeed;
+    using PriceConverter for uint;
     uint public minimumUSD = 10 * 1e18;
 
     address[] public funders;
     mapping(address => uint) public addressToAmountFunded; 
 
+    address public owner;
+
     constructor() {
-        priceFeed = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306);
+        owner = msg.sender;
     }
 
     function fund() public payable  {
-        require(getConversionRate(msg.value) >= minimumUSD, "Didn't send enough!");
+        require(msg.value.getConversionRate() >= minimumUSD, "Didn't send enough!");
         funders.push(msg.sender);
         addressToAmountFunded[msg.sender] = msg.value;
     }
 
-    function getVersion() public view returns(uint) {
-        return(priceFeed.version());
+    function withdraw() public onlyOwner{
+        for(uint index = 0; index < funders.length; index++) {
+            address funder = funders[index];
+            addressToAmountFunded[funder] = 0;
+        }
+        funders = new address[](0);
+        //transfer
+        // payable(msg.sender).transfer(address(this).balance);
+        //send
+        // bool sendSuccess = payable(msg.sender).send(address(this).balance);
+        // require(sendSuccess, "Send Failed!");
+        //call
+        // (bool callSuccess, bytes memory dataReturned )= payable(msg.sender).call{value: address(this).balance}("");
+        (bool callSuccess,)= payable(msg.sender).call{value: address(this).balance}("");
+        require(callSuccess, "Call Failed!");
     }
 
-    function getDecimals() public view returns(uint8) {
-        return priceFeed.decimals();
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
     }
-
-    function getPrice() public view returns(uint) {
-        (,int256 answer,,,) = priceFeed.latestRoundData();
-        return uint(answer * 1e10);
-    }
-
-    function getConversionRate(uint ethAmount) public view returns(uint) {
-        uint price = getPrice();
-        uint ethAmountInUSD = (ethAmount * price) / 1e18;
-        return ethAmountInUSD;
-    }
-
+    
 }
 
